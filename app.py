@@ -5,13 +5,15 @@ from github import Github
 from datetime import datetime
 from io import StringIO
 
+st.set_page_config(page_title="消费记录系统", layout="wide")  # ✅ 必须是第一个 Streamlit 命令
+
 # 读取 secrets.toml 中的 GitHub 配置
-# DEBUG 调试用，记得后面删掉
 st.write("当前 secrets 内容：", st.secrets)
 
 GITHUB_TOKEN = st.secrets["github"]["token"]
 REPO_NAME = st.secrets["github"]["repo"]
 FILE_PATH = st.secrets["github"]["path"]
+
 
 
 # GitHub 对象初始化
