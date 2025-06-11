@@ -1,8 +1,9 @@
+import streamlit as st
 from supabase import create_client, Client
 
-# ✅ 你的 Supabase 项目配置
-url = "https://xixtvdzauqlgvyrigfam.supabase.co"
-key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhpa3R2ZHphdXFsZ3Z5cmlnZmFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk2NDAzNjcsImV4cCI6MjA2NTIxNjM2N30.poPK_WfD2Kz9SXuYTdYxyOs9Exwq0BAZ1hJnSr9NSvw"
+# ✅ 从 secrets.toml 中读取 Supabase 配置
+url = st.secrets["supabase"]["url"]
+key = st.secrets["supabase"]["key"]
 
 # ✅ 初始化 Supabase 客户端
 supabase: Client = create_client(url, key)
