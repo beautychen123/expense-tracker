@@ -8,10 +8,10 @@ import base64
 import json
 import requests
 
-# GitHub 配置（写死版，如需更安全建议换 secrets.toml）
-GITHUB_TOKEN = "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"
-REPO = "beautychen123/expense-tracker"
-GITHUB_PATH = "data/expenses.csv"
+# 从 secrets 中读取配置
+GITHUB_TOKEN = st.secrets["github"]["token"]
+REPO = st.secrets["github"]["repo"]
+GITHUB_PATH = st.secrets["github"]["path"]
 LOCAL_CSV = "expenses.csv"
 DATA_CSV = "data/expenses.csv"
 
