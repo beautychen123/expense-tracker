@@ -1,5 +1,5 @@
 import streamlit as st
-st.set_page_config(page_title="消费记录系统", layout="wide")  # ✅ 必须是第一个 Streamlit 命令
+st.set_page_config(page_title="消费记录系统", layout="wide")  # ✅ 只能有这一行，必须在最前面
 
 import pandas as pd
 import plotly.express as px
@@ -7,16 +7,11 @@ from github import Github
 from datetime import datetime
 from io import StringIO
 
-# DEBUG 调试信息
-st.write("当前 secrets 内容：", st.secrets)
 
 # 读取 secrets.toml 中的 GitHub 配置
 GITHUB_TOKEN = st.secrets["github"]["token"]
 REPO_NAME = st.secrets["github"]["repo"]
 FILE_PATH = st.secrets["github"]["path"]
-
-
-
 
 # GitHub 对象初始化
 g = Github(GITHUB_TOKEN)
@@ -49,8 +44,7 @@ def save_data(df):
             df.to_csv(index=False, encoding="utf-8")
         )
 
-st.set_page_config(page_title="消费记录系统", layout="wide")
-
+# 页面主体
 st.title("💸 我的消费记录系统")
 st.subheader("📬 多项消费录入")
 
