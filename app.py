@@ -18,14 +18,12 @@ except FileNotFoundError:
     df = pd.DataFrame(columns=["日期", "项目", "金额", "分类"])
     df.to_csv(LOCAL_CSV, index=False)
 
-# 行数初始设置
 if "num_rows" not in st.session_state:
     st.session_state.num_rows = 3
 
 st.header("📥 多项消费录入")
 record_date = st.date_input("消费日期", value=date.today())
 
-# 添加/删除输入行
 col_add, col_del = st.columns([1, 1])
 with col_add:
     if st.button("➕ 添加一行"):
@@ -34,7 +32,6 @@ with col_del:
     if st.button("➖ 删除一行") and st.session_state.num_rows > 1:
         st.session_state.num_rows -= 1
 
-# 录入表单
 rows = []
 for i in range(st.session_state.num_rows):
     st.markdown(f"**第 {i+1} 项**")
@@ -45,7 +42,6 @@ for i in range(st.session_state.num_rows):
     if item and amount:
         rows.append([record_date, item, amount, category])
 
-# 提交记录并备份
 if st.button("✅ 提交所有记录"):
     if rows:
         new_data = pd.DataFrame(rows, columns=df.columns)
@@ -57,19 +53,37 @@ if st.button("✅ 提交所有记录"):
     else:
         st.warning("没有填写任何有效记录。")
 
-# 展示数据和图表
 if not df.empty:
-    df["年"] = pd.to_datetime(df["日期"]).dt.year
-    df["月"] = pd.to_datetime(df["日期"]).dt.month
-    df["日"] = pd.to_datetime(df["日期"]).dt.day
-    st.subheader(f"📅 {date.today().year}年{date.today().month}月的记录")
-    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+    df["日期"] = pd.to_datetime(df["日期"])
+    this_year = date.today().year
+    this_month = date.today().month
+    df["年月"] = df["日期"].dt.to_period("M").astype(str)
+    display_df = df[["日期", "项目", "金额", "分类"]].copy()
+    current_month_df = df[(df["日期"].dt.year == this_year) & (df["日期"].dt.month == this_month)]
+
+    st.subheader(f"📅 {this_year}年{this_month}月的记录")
+
+    # 当前月总消费
+    monthly_total = current_month_df["金额"].sum()
+    st.markdown(f"### 💰 {this_year}年{this_month}月总消费：{monthly_total:.2f} 元")
+
+    # 折叠 + 滚动表格编辑
+    with st.expander("📋 查看/编辑详细记录", expanded=True):
+        st.markdown("（表格可编辑，修改后请点击保存，支持滚动）")
+        edited_df = st.data_editor(
+            display_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            height=400
+        )
+
     if st.button("💾 修改已保存"):
-        edited_df.to_csv(LOCAL_CSV, index=False)
-        edited_df.to_csv(GITHUB_CSV, index=False)
+        merged_df = df.copy()
+        merged_df.update(edited_df)
+        merged_df.to_csv(LOCAL_CSV, index=False)
+        merged_df.to_csv(GITHUB_CSV, index=False)
         st.success("修改内容已保存并同步到 GitHub")
 
-    # 分类消费柱状图
     st.subheader("📊 分类消费柱状图")
     category_sum = edited_df.groupby("分类", as_index=False)["金额"].sum()
     fig_bar = go.Figure()
@@ -88,10 +102,8 @@ if not df.empty:
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
-    # 每月消费趋势折线图（美化版）
     st.subheader("📈 每月消费趋势")
-    edited_df["年月"] = pd.to_datetime(edited_df["日期"]).dt.to_period("M").astype(str)
-    monthly_sum = edited_df.groupby("年月", as_index=False)["金额"].sum()
+    monthly_sum = df.groupby("年月", as_index=False)["金额"].sum()
     fig_line = go.Figure()
     fig_line.add_trace(go.Scatter(
         x=monthly_sum["年月"],
