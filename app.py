@@ -1,99 +1,107 @@
 import streamlit as st
 import pandas as pd
-import os
-from datetime import date
-from io import StringIO
+import plotly.express as px
 from github import Github
-import base64
+from datetime import datetime
+from io import StringIO
 
-# 加载 GitHub token 和路径配置
+# 读取 secrets.toml 中的 GitHub 配置
 GITHUB_TOKEN = st.secrets["github"]["token"]
 REPO_NAME = st.secrets["github"]["repo"]
 FILE_PATH = st.secrets["github"]["path"]
 
-# GitHub 初始化
+# GitHub 对象初始化
 g = Github(GITHUB_TOKEN)
 repo = g.get_repo(REPO_NAME)
 
-# 加载 CSV 数据（从本地或 GitHub）
-@st.cache_data
+# 尝试读取远程 CSV 文件
+@st.cache_data(ttl=60)
 def load_data():
     try:
-        file_content = repo.get_contents(FILE_PATH)
-        df = pd.read_csv(StringIO(file_content.decoded_content.decode("utf-8")))
+        contents = repo.get_contents(FILE_PATH)
+        df = pd.read_csv(StringIO(contents.decoded_content.decode("utf-8")))
         return df
     except Exception:
         return pd.DataFrame(columns=["日期", "项目", "金额", "分类"])
 
-df = load_data()
+# 保存 DataFrame 到 GitHub
+def save_data(df):
+    try:
+        contents = repo.get_contents(FILE_PATH)
+        repo.update_file(
+            contents.path,
+            "Update expenses.csv",
+            df.to_csv(index=False, encoding="utf-8"),
+            contents.sha
+        )
+    except Exception:
+        repo.create_file(
+            FILE_PATH,
+            "Create expenses.csv",
+            df.to_csv(index=False, encoding="utf-8")
+        )
 
-# 设置页面标题
-st.title("🧾 我的消费记录系统")
-st.markdown("📅 多项消费录入")
+st.set_page_config(page_title="消费记录系统", layout="wide")
 
-# 初始化 session state
-if "num_rows" not in st.session_state:
-    st.session_state.num_rows = 1
+st.title("💸 我的消费记录系统")
+st.subheader("📬 多项消费录入")
 
-# 日期选择
-record_date = st.date_input("消费日期", date.today())
+today = datetime.today().strftime("%Y-%m-%d")
+input_date = st.date_input("消费日期", value=pd.to_datetime(today), format="YYYY/MM/DD")
 
-# 添加/删除行按钮
-col_add, col_del = st.columns([1, 1])
-with col_add:
+if "rows" not in st.session_state:
+    st.session_state.rows = 1
+
+col1, col2 = st.columns([1, 1])
+with col1:
     if st.button("➕ 添加一行"):
-        st.session_state.num_rows += 1
-with col_del:
-    if st.button("➖ 删除一行") and st.session_state.num_rows > 1:
-        st.session_state.num_rows -= 1
+        st.session_state.rows += 1
+with col2:
+    if st.button("➖ 删除一行") and st.session_state.rows > 1:
+        st.session_state.rows -= 1
 
-# 输入多项
-rows = []
-for i in range(st.session_state.num_rows):
-    st.markdown(f"### 第 {i+1} 项")
-    cols = st.columns([2, 1, 1])
+items = []
+for i in range(st.session_state.rows):
+    st.markdown(f"#### 第{i+1}项")
+    cols = st.columns([3, 1, 2])
     item = cols[0].text_input("项目", key=f"item_{i}")
-    amount = cols[1].number_input("金额", min_value=0.01, step=1.0, key=f"amount_{i}")
-    category = cols[2].selectbox("分类", ["饮食", "交通", "其他"], key=f"cat_{i}")
-    if item and amount:
-        rows.append([record_date, item, amount, category])
+    amount = cols[1].number_input("金额", min_value=0.0, step=0.01, key=f"amount_{i}")
+    category = cols[2].selectbox("分类", ["饮食", "交通", "购物", "娱乐", "其他"], key=f"category_{i}")
+    items.append({"项目": item, "金额": amount, "分类": category})
 
-# 提交记录按钮
 if st.button("✅ 提交所有记录"):
-    if rows:
-        new_df = pd.DataFrame(rows, columns=["日期", "项目", "金额", "分类"])
-        df = pd.concat([df, new_df], ignore_index=True)
-        df["日期"] = pd.to_datetime(df["日期"])
-        csv_buffer = StringIO()
-        df.to_csv(csv_buffer, index=False, encoding="utf-8")
-        repo_file = repo.get_contents(FILE_PATH)
-        try:
-            repo.update_file(FILE_PATH, "Update expenses", csv_buffer.getvalue(), repo_file.sha)
-            st.success("成功添加记录，数据已同步 GitHub!")
-        except Exception as e:
-            st.error(f"上传出错: {str(e)}")
+    df = load_data()
+    for item in items:
+        if item["项目"]:
+            df = pd.concat([df, pd.DataFrame([{
+                "日期": pd.to_datetime(input_date).strftime("%Y-%m-%d"),
+                "项目": item["项目"],
+                "金额": item["金额"],
+                "分类": item["分类"]
+            }])], ignore_index=True)
+    save_data(df)
+    st.success("成功添加 {} 条记录，数据已同步 GitHub!".format(len(items)))
 
-# 本月消费数据
-df["日期"] = pd.to_datetime(df["日期"])
-df["年月"] = df["日期"].dt.to_period("M").astype(str)
-current_month = date.today().strftime("%Y-%m")
-monthly_df = df[df["年月"] == current_month]
+df = load_data()
+if not df.empty:
+    df["日期"] = pd.to_datetime(df["日期"], errors="coerce")
+    df["年月"] = df["日期"].dt.to_period("M").astype(str)
 
-# 总消费
-total = monthly_df["金额"].sum()
-st.markdown(f"## 🗓️ {current_month} 的记录")
-st.markdown(f"### 💰 {current_month} 总消费：{total:.2f} 元")
+    current_month = datetime.today().strftime("%Y-%m")
+    month_df = df[df["年月"] == current_month]
 
-# 折叠编辑表格
-with st.expander("🗂️ 查看/编辑详细记录"):
-    edited_df = st.data_editor(monthly_df.drop(columns=["年月"]), num_rows="dynamic")
-    if edited_df is not None:
-        df.update(edited_df)
-        csv_buffer = StringIO()
-        df.to_csv(csv_buffer, index=False, encoding="utf-8")
-        repo_file = repo.get_contents(FILE_PATH)
-        try:
-            repo.update_file(FILE_PATH, "Auto sync after edit", csv_buffer.getvalue(), repo_file.sha)
+    st.header(f"📅 {current_month} 的记录")
+    total = month_df["金额"].sum()
+    st.subheader(f"💰 {current_month} 总消费： {total:.2f} 元")
+
+    with st.expander("📋 查看/编辑详细记录"):
+        edited_df = st.data_editor(month_df, use_container_width=True, num_rows="dynamic")
+        if edited_df.equals(month_df) is False:
+            df.update(edited_df)
+            save_data(df)
             st.success("修改内容已保存并同步到 GitHub")
-        except Exception as e:
-            st.error(f"同步失败: {str(e)}")
+
+    fig = px.bar(month_df, x="分类", y="金额", color="分类", title="📊 分类消费柱状图")
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("暂无记录，请添加一些消费项")
