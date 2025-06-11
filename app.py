@@ -64,7 +64,7 @@ if st.button("✅ 提交所有记录"):
 # ========================== 展示与自动保存 ==========================
 
 if not df.empty:
-    df["日期"] = pd.to_datetime(df["日期"])
+   df["日期"] = pd.to_datetime(df["日期"], errors="coerce")
     df["年月"] = df["日期"].dt.to_period("M").astype(str)
     display_df = df[["日期", "项目", "金额", "分类"]].copy()
     this_year, this_month = date.today().year, date.today().month
