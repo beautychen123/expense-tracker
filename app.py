@@ -1,25 +1,57 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import date, datetime
 import plotly.graph_objects as go
 import os
+import base64
+import json
+import requests
 
-st.set_page_config(page_title="我的消费记录", page_icon="💸")
+# GitHub 配置（写死版，如需更安全建议换 secrets.toml）
+GITHUB_TOKEN = "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"
+REPO = "beautychen123/expense-tracker"
+GITHUB_PATH = "data/expenses.csv"
+LOCAL_CSV = "expenses.csv"
+DATA_CSV = "data/expenses.csv"
+
+def upload_to_github():
+    try:
+        api_url = f"https://api.github.com/repos/{REPO}/contents/{GITHUB_PATH}"
+        with open(DATA_CSV, "rb") as f:
+            content = f.read()
+        encoded = base64.b64encode(content).decode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github+json"
+        }
+        get_resp = requests.get(api_url, headers=headers)
+        sha = get_resp.json()["sha"] if get_resp.status_code == 200 else None
+        payload = {
+            "message": f"auto update {datetime.now().isoformat()}",
+            "content": encoded,
+            "branch": "main"
+        }
+        if sha:
+            payload["sha"] = sha
+        resp = requests.put(api_url, headers=headers, data=json.dumps(payload))
+        if resp.status_code in [200, 201]:
+            st.toast("✅ GitHub 同步成功", icon="🌐")
+        else:
+            st.warning(f"GitHub 同步失败: {resp.status_code}")
+    except Exception as e:
+        st.error(f"上传出错: {e}")
+
+st.set_page_config(page_title="消费记录", page_icon="💰")
 st.title("💸 我的消费记录系统")
 
-LOCAL_CSV = "expenses.csv"
-GITHUB_CSV = "data/expenses.csv"
-
-# 自动恢复机制：优先从 GitHub 拉取
-if not os.path.exists(LOCAL_CSV) and os.path.exists(GITHUB_CSV):
-    st.warning("🔁 本地账本不存在，已从 GitHub 备份恢复。")
-    df = pd.read_csv(GITHUB_CSV)
+if not os.path.exists(LOCAL_CSV) and os.path.exists(DATA_CSV):
+    df = pd.read_csv(DATA_CSV)
     df.to_csv(LOCAL_CSV, index=False)
 elif os.path.exists(LOCAL_CSV):
     df = pd.read_csv(LOCAL_CSV)
-elif os.path.exists(GITHUB_CSV):
-    df = pd.read_csv(GITHUB_CSV)
+elif os.path.exists(DATA_CSV):
+    df = pd.read_csv(DATA_CSV)
 else:
     df = pd.DataFrame(columns=["日期", "项目", "金额", "分类"])
     df.to_csv(LOCAL_CSV, index=False)
@@ -48,7 +80,6 @@ for i in range(st.session_state.num_rows):
     if item and amount:
         rows.append([record_date, item, amount, category])
 
-# ✅ 避免写入重复演示数据
 if st.button("✅ 提交所有记录"):
     if rows:
         new_data = pd.DataFrame(rows, columns=["日期", "项目", "金额", "分类"])
@@ -56,15 +87,15 @@ if st.button("✅ 提交所有记录"):
         df = pd.concat([df, new_data], ignore_index=True)
         df.to_csv(LOCAL_CSV, index=False)
         os.makedirs("data", exist_ok=True)
-        df.to_csv(GITHUB_CSV, index=False)
-        st.success(f"成功添加 {len(rows)} 条记录，数据已同步 GitHub！")
+        df.to_csv(DATA_CSV, index=False)
+        st.success(f"成功添加 {len(rows)} 条记录，数据已同步 GitHub!")
+        upload_to_github()
     else:
-        st.warning("没有填写任何有效记录。")
-
-# ========================== 展示与自动保存 ==========================
+        st.warning("请填写至少一项记录。")
 
 if not df.empty:
-   df["日期"] = pd.to_datetime(df["日期"], errors="coerce")
+    df["日期"] = pd.to_datetime(df["日期"], errors="coerce")
+    df = df.dropna(subset=["日期"])
     df["年月"] = df["日期"].dt.to_period("M").astype(str)
     display_df = df[["日期", "项目", "金额", "分类"]].copy()
     this_year, this_month = date.today().year, date.today().month
@@ -74,9 +105,8 @@ if not df.empty:
     monthly_total = current_month_df["金额"].sum()
     st.markdown(f"### 💰 {this_year}年{this_month}月总消费：{monthly_total:.2f} 元")
 
-    # 自动保存逻辑：编辑后对比保存
     with st.expander("📋 查看/编辑详细记录", expanded=True):
-        st.markdown("（表格可编辑，编辑后将自动保存）")
+        st.markdown("（表格可编辑，修改后自动保存并同步）")
         edited_df = st.data_editor(
             display_df,
             num_rows="dynamic",
@@ -88,10 +118,10 @@ if not df.empty:
     if not edited_df.equals(display_df):
         df.update(edited_df)
         df.to_csv(LOCAL_CSV, index=False)
-        df.to_csv(GITHUB_CSV, index=False)
-        st.success("✅ 修改已自动保存并同步 GitHub")
+        df.to_csv(DATA_CSV, index=False)
+        st.success("✅ 修改内容已保存并同步到 GitHub")
+        upload_to_github()
 
-    # 分类图表
     st.subheader("📊 分类消费柱状图")
     category_sum = df.groupby("分类", as_index=False)["金额"].sum()
     fig_bar = go.Figure()
@@ -104,9 +134,7 @@ if not df.empty:
     ))
     fig_bar.update_layout(
         yaxis_title="金额",
-        xaxis_title="分类",
-        uniformtext_minsize=8,
-        uniformtext_mode='hide'
+        xaxis_title="分类"
     )
     st.plotly_chart(fig_bar, use_container_width=True)
 
@@ -125,8 +153,6 @@ if not df.empty:
     fig_line.update_layout(
         xaxis_title="月份",
         yaxis_title="金额",
-        hovermode="x unified",
-        plot_bgcolor="rgba(0,0,0,0)",
-        yaxis=dict(gridcolor="lightgray")
+        hovermode="x unified"
     )
     st.plotly_chart(fig_line, use_container_width=True)
