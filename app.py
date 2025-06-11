@@ -11,12 +11,17 @@ st.title("💸 我的消费记录系统")
 LOCAL_CSV = "expenses.csv"
 GITHUB_CSV = "data/expenses.csv"
 
-# 初始化数据
-try:
-    df = pd.read_csv(LOCAL_CSV)
-except FileNotFoundError:
-    df = pd.DataFrame(columns=["日期", "项目", "金额", "分类"])
+# 自动恢复机制：如果本地文件不存在，就尝试从 GitHub 路径恢复
+if not os.path.exists(LOCAL_CSV) and os.path.exists(GITHUB_CSV):
+    st.warning("🔁 本地账本不存在，已自动从 GitHub 备份恢复。")
+    df = pd.read_csv(GITHUB_CSV)
     df.to_csv(LOCAL_CSV, index=False)
+else:
+    try:
+        df = pd.read_csv(LOCAL_CSV)
+    except FileNotFoundError:
+        df = pd.DataFrame(columns=["日期", "项目", "金额", "分类"])
+        df.to_csv(LOCAL_CSV, index=False)
 
 if "num_rows" not in st.session_state:
     st.session_state.num_rows = 3
@@ -63,11 +68,9 @@ if not df.empty:
 
     st.subheader(f"📅 {this_year}年{this_month}月的记录")
 
-    # 当前月总消费
     monthly_total = current_month_df["金额"].sum()
     st.markdown(f"### 💰 {this_year}年{this_month}月总消费：{monthly_total:.2f} 元")
 
-    # 折叠 + 滚动表格编辑
     with st.expander("📋 查看/编辑详细记录", expanded=True):
         st.markdown("（表格可编辑，修改后请点击保存，支持滚动）")
         edited_df = st.data_editor(
