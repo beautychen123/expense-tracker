@@ -63,18 +63,19 @@ with st.form(key="entry_form"):
     with col2:
         amount = st.number_input("金额", min_value=0.0, step=0.01)
     with col3:
-        # 动态分类
         categories = list(df["分类"].unique()) if not df.empty else ["饮食", "交通", "娱乐", "购物"]
         category = st.selectbox("分类", options=categories + ["+ 添加新分类"])
 
     if category == "+ 添加新分类":
         category = st.text_input("请输入新分类名称")
 
+    date = st.date_input("日期", value=datetime.today())
+
     submitted = st.form_submit_button("✅ 提交所有记录")
 
 if submitted and item and amount is not None:
     new_entry = {
-        "日期": today,
+        "日期": date.strftime('%Y-%m-%d'),
         "项目": item,
         "金额": amount,
         "分类": category
@@ -86,29 +87,64 @@ if submitted and item and amount is not None:
 # -------------------- 显示当月记录 --------------------
 st.subheader(f"📅 {current_month} 的记录")
 df_month = df[df["年月"] == current_month]
-st.data_editor(df_month, num_rows="dynamic", use_container_width=True, disabled=["年月"])
+st.data_editor(
+    df_month.drop(columns=["年月"]),
+    num_rows="dynamic",
+    use_container_width=True
+)
 
 # -------------------- 当月合计 --------------------
 month_total = df_month["金额"].sum()
 st.subheader(f"💰 {current_month} 总消费：{month_total:.2f} 元")
 
-# -------------------- 统计图表 --------------------
-if not df.empty:
+# -------------------- 图表统计分析 --------------------
+if not df_month.empty:
     st.subheader("📊 消费统计分析")
 
-    # 类型分布 - 条形图
+    # 条形图（分类分布）
     by_category = df_month.groupby("分类")["金额"].sum().reset_index()
-    fig_bar = px.bar(by_category, x="分类", y="金额", title="不同类型消费分布", text_auto=True)
+    fig_bar = px.bar(
+        by_category,
+        x="分类",
+        y="金额",
+        title="不同类型消费分布",
+        text="金额"
+    )
+    fig_bar.update_traces(
+        textposition="outside",
+        textfont_size=16,
+        marker_color="lightblue"
+    )
+    fig_bar.update_layout(
+        uniformtext_minsize=12,
+        uniformtext_mode="hide"
+    )
     st.plotly_chart(fig_bar, use_container_width=True)
 
-    # 月份趋势 - 折线图
+    # 折线图（月趋势）
     df["月份"] = pd.to_datetime(df["日期"]).dt.to_period("M").astype(str)
     by_month = df.groupby("月份")["金额"].sum().reset_index()
     fig_line = px.line(by_month, x="月份", y="金额", title="每月消费趋势")
     st.plotly_chart(fig_line, use_container_width=True)
 
-    # 消费占比 - 饼图
-    fig_pie = px.pie(by_category, names="分类", values="金额", title="分类消费占比")
+    # 饼图（分类占比）
+    color_sequence = ["red", "gold", "blue", "green"]
+    by_category["label"] = by_category.apply(
+        lambda row: f"{row['金额'] / by_category['金额'].sum():.1%} {row['分类']}",
+        axis=1
+    )
+    fig_pie = px.pie(
+        by_category,
+        names="label",
+        values="金额",
+        title="分类消费占比",
+        color_discrete_sequence=color_sequence
+    )
+    fig_pie.update_traces(
+        textposition="outside",
+        textinfo="label",
+        textfont_size=16
+    )
     st.plotly_chart(fig_pie, use_container_width=True)
 else:
-    st.info("暂无记录，快来添加吧！")
+    st.info("📭 当前月份暂无消费记录。")
