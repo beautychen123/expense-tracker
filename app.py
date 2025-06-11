@@ -6,9 +6,13 @@ from datetime import datetime
 from io import StringIO
 
 # 读取 secrets.toml 中的 GitHub 配置
+# DEBUG 调试用，记得后面删掉
+st.write("当前 secrets 内容：", st.secrets)
+
 GITHUB_TOKEN = st.secrets["github"]["token"]
 REPO_NAME = st.secrets["github"]["repo"]
 FILE_PATH = st.secrets["github"]["path"]
+
 
 # GitHub 对象初始化
 g = Github(GITHUB_TOKEN)
