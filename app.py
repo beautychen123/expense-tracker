@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import plotly.express as px
-from supabase import get_expenses, add_expense
+from supabase_client import get_expenses, add_expense
 
 # 页面配置
 st.set_page_config(page_title="消费记录系统", layout="wide")
