@@ -1,4 +1,4 @@
-supabase
 streamlit
 pandas
 plotly
+supabase
