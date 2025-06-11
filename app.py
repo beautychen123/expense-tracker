@@ -4,6 +4,7 @@ import plotly.express as px
 from datetime import datetime
 from supabase_client import get_expenses, add_expense
 
+
 st.set_page_config(page_title="消费记录系统", layout="wide")
 st.title("💰 消费记录系统")
 
