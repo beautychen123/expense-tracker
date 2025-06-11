@@ -1,23 +1,23 @@
 from supabase import create_client, Client
 
-# 你的 Supabase 项目 URL 和 anon key（从 API 设置中复制）
-url = "https://xyz.supabase.co"  # 替换为你的 Project URL
-key = "your_anon_key"  # 替换为你的 anon key
+# ✅ 你的 Supabase 项目配置
+url = "https://xixtvdzauqlgvyrigfam.supabase.co"
+key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhpa3R2ZHphdXFsZ3Z5cmlnZmFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk2NDAzNjcsImV4cCI6MjA2NTIxNjM2N30.poPK_WfD2Kz9SXuYTdYxyOs9Exwq0BAZ1hJnSr9NSvw"
 
-# 创建 Supabase 客户端
+# ✅ 初始化 Supabase 客户端
 supabase: Client = create_client(url, key)
 
+# ✅ 查询所有消费记录（按日期倒序）
 def get_expenses():
-    # 从 Supabase 获取数据
-    data = supabase.table("expenses").select("*").execute()
-    return data["data"]
+    res = supabase.table("expenses").select("*").order("date", desc=True).execute()
+    return res.data
 
+# ✅ 插入一条消费记录
 def add_expense(date, item, amount, category):
-    # 向 Supabase 添加一条新的记录
-    new_expense = {
-        "日期": date,
-        "项目": item,
-        "金额": amount,
-        "分类": category,
+    data = {
+        "date": date,
+        "item": item,
+        "amount": amount,
+        "category": category
     }
-    supabase.table("expenses").insert(new_expense).execute()
+    supabase.table("expenses").insert(data).execute()
