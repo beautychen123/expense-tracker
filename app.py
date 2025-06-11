@@ -11,17 +11,18 @@ st.title("💸 我的消费记录系统")
 LOCAL_CSV = "expenses.csv"
 GITHUB_CSV = "data/expenses.csv"
 
-# 自动恢复机制：如果本地文件不存在，就尝试从 GitHub 路径恢复
+# 自动恢复机制：优先从 GitHub 拉取
 if not os.path.exists(LOCAL_CSV) and os.path.exists(GITHUB_CSV):
-    st.warning("🔁 本地账本不存在，已自动从 GitHub 备份恢复。")
+    st.warning("🔁 本地账本不存在，已从 GitHub 备份恢复。")
     df = pd.read_csv(GITHUB_CSV)
     df.to_csv(LOCAL_CSV, index=False)
+elif os.path.exists(LOCAL_CSV):
+    df = pd.read_csv(LOCAL_CSV)
+elif os.path.exists(GITHUB_CSV):
+    df = pd.read_csv(GITHUB_CSV)
 else:
-    try:
-        df = pd.read_csv(LOCAL_CSV)
-    except FileNotFoundError:
-        df = pd.DataFrame(columns=["日期", "项目", "金额", "分类"])
-        df.to_csv(LOCAL_CSV, index=False)
+    df = pd.DataFrame(columns=["日期", "项目", "金额", "分类"])
+    df.to_csv(LOCAL_CSV, index=False)
 
 if "num_rows" not in st.session_state:
     st.session_state.num_rows = 3
@@ -47,48 +48,52 @@ for i in range(st.session_state.num_rows):
     if item and amount:
         rows.append([record_date, item, amount, category])
 
+# ✅ 避免写入重复演示数据
 if st.button("✅ 提交所有记录"):
     if rows:
-        new_data = pd.DataFrame(rows, columns=df.columns)
+        new_data = pd.DataFrame(rows, columns=["日期", "项目", "金额", "分类"])
+        new_data["日期"] = pd.to_datetime(new_data["日期"])
         df = pd.concat([df, new_data], ignore_index=True)
         df.to_csv(LOCAL_CSV, index=False)
         os.makedirs("data", exist_ok=True)
         df.to_csv(GITHUB_CSV, index=False)
-        st.success(f"成功添加 {len(rows)} 条记录，数据已备份到 GitHub！")
+        st.success(f"成功添加 {len(rows)} 条记录，数据已同步 GitHub！")
     else:
         st.warning("没有填写任何有效记录。")
 
+# ========================== 展示与自动保存 ==========================
+
 if not df.empty:
     df["日期"] = pd.to_datetime(df["日期"])
-    this_year = date.today().year
-    this_month = date.today().month
     df["年月"] = df["日期"].dt.to_period("M").astype(str)
     display_df = df[["日期", "项目", "金额", "分类"]].copy()
+    this_year, this_month = date.today().year, date.today().month
     current_month_df = df[(df["日期"].dt.year == this_year) & (df["日期"].dt.month == this_month)]
 
     st.subheader(f"📅 {this_year}年{this_month}月的记录")
-
     monthly_total = current_month_df["金额"].sum()
     st.markdown(f"### 💰 {this_year}年{this_month}月总消费：{monthly_total:.2f} 元")
 
+    # 自动保存逻辑：编辑后对比保存
     with st.expander("📋 查看/编辑详细记录", expanded=True):
-        st.markdown("（表格可编辑，修改后请点击保存，支持滚动）")
+        st.markdown("（表格可编辑，编辑后将自动保存）")
         edited_df = st.data_editor(
             display_df,
             num_rows="dynamic",
             use_container_width=True,
-            height=400
+            height=400,
+            key="editable_data"
         )
 
-    if st.button("💾 修改已保存"):
-        merged_df = df.copy()
-        merged_df.update(edited_df)
-        merged_df.to_csv(LOCAL_CSV, index=False)
-        merged_df.to_csv(GITHUB_CSV, index=False)
-        st.success("修改内容已保存并同步到 GitHub")
+    if not edited_df.equals(display_df):
+        df.update(edited_df)
+        df.to_csv(LOCAL_CSV, index=False)
+        df.to_csv(GITHUB_CSV, index=False)
+        st.success("✅ 修改已自动保存并同步 GitHub")
 
+    # 分类图表
     st.subheader("📊 分类消费柱状图")
-    category_sum = edited_df.groupby("分类", as_index=False)["金额"].sum()
+    category_sum = df.groupby("分类", as_index=False)["金额"].sum()
     fig_bar = go.Figure()
     fig_bar.add_trace(go.Bar(
         x=category_sum["分类"],
